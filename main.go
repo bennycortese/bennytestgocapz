@@ -20,7 +20,7 @@ import (
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
 func main() {
-	config, err := clientcmd.BuildConfigFromFlags("", "/home/jon/.kube/config")
+	config, err := clientcmd.BuildConfigFromFlags("", "/home/bennystream/.kube/config")
 	if err != nil {
 		panic(err)
 	}
@@ -39,7 +39,7 @@ func main() {
 	amp := &infrav1exp.AzureMachinePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
-			Name:      "machinepool-302-mp-0",
+			Name:      "machinepool-6423-mp-0",
 		},
 	}
 	err = c.Get(context.TODO(), client.ObjectKeyFromObject(amp), amp)
@@ -57,12 +57,43 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
 	}
+
+	galleryLocation := os.Getenv("AZURE_LOCATION")
+	galleryName := "GalleryInstantiation"
+
+	gallery := armcompute.Gallery{
+		Location: &galleryLocation,
+	}
+	
+
+	galleryFactory, err := armcompute.NewGalleriesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create gallery: %v", err)
+	}
+
+	galleryFactory.BeginCreateOrUpdate(ctx, "capi-snapshot-group", galleryName, gallery, nil)
+
+	_ = galleryFactory
+	_ = clientFactory
+	
+	/*
+	galleryFactory.BeginCreateOrUpdate()
+
+	res, err := clientFactory.NewSharedGalleryImagesClient(clientFactory)
+if err != nil {
+	log.Fatalf("failed to finish the request: %v", err)
+}*/
+
+	/*
 	res, err := clientFactory.NewSharedGalleriesClient().Get(ctx, "eastus", "galleryUniqueName", nil)
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
-	}
+	}*/
 	// You could use response here. We use blank identifier for just demo purposes.
-	_ = res
+	
+	/*
+	_ = res*/
+	
 	// If the HTTP response code is 200 as defined in example definition, your response structure would look as follows. Please pay attention that all the values in the output are fake values for just demo purposes.
 	// res.SharedGallery = armcompute.SharedGallery{
 	// 	Name: to.Ptr("myGalleryName"),
