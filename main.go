@@ -6,6 +6,9 @@ import (
 	"log"
 	"os"
 
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
+
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -47,7 +50,7 @@ func main() {
 		panic(err)
 	}
 	fmt.Println("provider id:", amp.Spec.ProviderID)
-
+	
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
@@ -71,7 +74,54 @@ func main() {
 		log.Fatalf("failed to create gallery: %v", err)
 	}
 
-	galleryFactory.BeginCreateOrUpdate(ctx, "capi-snapshot-group", galleryName, gallery, nil)
+	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart", galleryName, gallery, nil)
+
+	imageFactory, err := armcompute.NewImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create imageFactory: %v", err)
+	}
+
+	snapshotFactory, err := armcompute.NewSnapshotsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create snapshotFactory: %v", err)
+	}
+
+	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart", "example-snapshot", armcompute.Snapshot{
+		Location: to.Ptr("East US"),
+		Properties: &armcompute.SnapshotProperties{
+			CreationData: &armcompute.CreationData{
+				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
+				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-5lxxj_etcddisk"),
+			},
+		},
+	}, nil)
+
+	if error != nil {
+		log.Fatalf("failed to create snapshot: %v", error)
+	}
+	
+
+	_ = imageFactory
+	_ = snapshotFactory
+	/*
+	imageFactory.BeginCreateOrUpdate(ctx, "myResourceGroup", "myImage", armcompute.Image{
+		Location: to.Ptr("West US"),
+		Properties: &armcompute.ImageProperties{
+			StorageProfile: &armcompute.ImageStorageProfile{
+				OSDisk: &armcompute.ImageOSDisk{
+					Snapshot: &armcompute.SubResource{
+						ID: to.Ptr("subscriptions/{subscription-id}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/snapshots/mySnapshot"),
+					},
+					OSState: to.Ptr(armcompute.OperatingSystemStateTypesGeneralized),
+					OSType:  to.Ptr(armcompute.OperatingSystemTypesLinux),
+				},
+				ZoneResilient: to.Ptr(false),
+			},
+		},
+	}, nil)*/ 
+
+
+	//amp.CordonAndDrain();
 
 	_ = galleryFactory
 	_ = clientFactory
