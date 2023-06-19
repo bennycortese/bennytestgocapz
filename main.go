@@ -19,6 +19,7 @@ import (
 	infrav1exp "sigs.k8s.io/cluster-api-provider-azure/exp/api/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
+	capzscope "sigs.k8s.io/cluster-api-provider-azure/azure/scope"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -77,6 +78,13 @@ func main() {
 	fmt.Println(healthyAmpm)
 	//ampMachines := amp.AzureMachinePoolList
 	//fmt.Println(ampMachines)
+
+	scope := &capzscope.MachinePoolMachineScope{
+		AzureMachinePoolMachine: healthyAmpm,
+	}
+
+	scope.CordonAndDrain(context.TODO())
+	
 	
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
