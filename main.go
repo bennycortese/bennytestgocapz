@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -50,6 +51,32 @@ func main() {
 		panic(err)
 	}
 	fmt.Println("provider id:", amp.Spec.ProviderID)
+
+	replicaCount := amp.Status.Replicas
+
+	healthyAmpm := &infrav1exp.AzureMachinePoolMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      "-1",
+		},
+	}
+
+	for i := 0; i < int(replicaCount); i++ {
+		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
+			ObjectMeta: metav1.ObjectMeta{
+				Namespace: "default",
+				Name:      "machinepool-12922-mp-0-" + strconv.Itoa(i),
+			},
+		}
+		err = c.Get(context.TODO(), client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
+		if err != nil {
+			panic(err)
+		}
+		
+	}
+	fmt.Println(healthyAmpm)
+	//ampMachines := amp.AzureMachinePoolList
+	//fmt.Println(ampMachines)
 	
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
