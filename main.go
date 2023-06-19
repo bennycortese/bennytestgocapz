@@ -19,8 +19,9 @@ import (
 	infrav1exp "sigs.k8s.io/cluster-api-provider-azure/exp/api/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
-	capzscope "sigs.k8s.io/cluster-api-provider-azure/azure/scope"
+	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"github.com/Azure/go-autorest/autorest"
 )
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
@@ -40,6 +41,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+
+	ctx := context.Background()
 
 	amp := &infrav1exp.AzureMachinePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,19 +81,49 @@ func main() {
 	fmt.Println(healthyAmpm)
 	//ampMachines := amp.AzureMachinePoolList
 	//fmt.Println(ampMachines)
-
-	scope := &capzscope.MachinePoolMachineScope{
-		AzureMachinePoolMachine: healthyAmpm,
-	}
-
-	scope.CordonAndDrain(context.TODO())
 	
 	
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
 	}
-	ctx := context.Background()
+
+
+	cluster := &clusterv1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "capi-quickstart"},
+	}
+
+	clusterScope, err := scope.NewClusterScope(context.Background(), scope.ClusterScopeParams{
+		AzureClients: scope.AzureClients{
+			Authorizer: autorest.NullAuthorizer{},
+		},
+		Client:  c,
+		Cluster: cluster,
+		AzureCluster: &infrav1.AzureCluster{
+			Spec: infrav1.AzureClusterSpec{
+				AzureClusterClassSpec: infrav1.AzureClusterClassSpec{
+					Location:       os.Getenv("AZURE_LOCATION"),
+					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
+				},
+				ResourceGroup: "capi-quickstart",
+				NetworkSpec: infrav1.NetworkSpec{
+					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-vnet", ResourceGroup: "capi-quickstart"},
+				},
+			},
+		},
+	})
+
+	err, myscope := scope.NewMachinePoolMachineScope(scope.MachinePoolMachineScopeParams{
+		Client:                  c,
+		//MachinePool:             new(expv1.MachinePool),
+		AzureMachinePool:        amp,
+		AzureMachinePoolMachine: healthyAmpm,
+		ClusterScope:            clusterScope,
+	})
+	
+
+	//myscope.CordonAndDrain(ctx)
+
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create client: %v", err)
