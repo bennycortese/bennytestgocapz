@@ -42,7 +42,7 @@ func main() {
 	amp := &infrav1exp.AzureMachinePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
-			Name:      "machinepool-6423-mp-0",
+			Name:      "machinepool-12922-mp-0",
 		},
 	}
 	err = c.Get(context.TODO(), client.ObjectKeyFromObject(amp), amp)
@@ -91,7 +91,7 @@ func main() {
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
 				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
-				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-5lxxj_etcddisk"),
+				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-fsw4x_OSDisk"),
 			},
 		},
 	}, nil)
@@ -99,7 +99,15 @@ func main() {
 	if error != nil {
 		log.Fatalf("failed to create snapshot: %v", error)
 	}
+
+	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart", "example-snapshot", nil)
+
+	if error != nil {
+		log.Fatalf("failed to delete snapshot: %v", error)
+	}
+
 	
+
 
 	_ = imageFactory
 	_ = snapshotFactory
