@@ -59,11 +59,16 @@ func main() {
 			Name:      machinePoolName,
 		},
 	}
-
-	err = c.Get(context.TODO(), client.ObjectKeyFromObject(amp), amp)
+	err = c.Get(ctx, client.ObjectKeyFromObject(mp), mp)
 	if err != nil {
 		panic(err)
 	}
+
+	err = c.Get(ctx, client.ObjectKeyFromObject(amp), amp)
+	if err != nil {
+		panic(err)
+	}
+
 	fmt.Println("provider id:", amp.Spec.ProviderID)
 
 	replicaCount := amp.Status.Replicas
@@ -82,7 +87,7 @@ func main() {
 				Name:      machinePoolName + "-" + strconv.Itoa(i),
 			},
 		}
-		err = c.Get(context.TODO(), client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
+		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
 		}
@@ -103,7 +108,7 @@ func main() {
 		ObjectMeta: metav1.ObjectMeta{Name: "capi-quickstart-rg"},
 	}
 
-	clusterScope, err := scope.NewClusterScope(context.Background(), scope.ClusterScopeParams{
+	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
 		AzureClients: scope.AzureClients{
 			Authorizer: autorest.NullAuthorizer{},
 		},
@@ -132,7 +137,9 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 	
-	fmt.Println(myscope.IsReady())
+	Node1, found, err := myscope.GetNode(ctx)
+	fmt.Println(Node1, found, " ", err)
+	
 
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
@@ -140,7 +147,7 @@ func main() {
 	}
 
 	galleryLocation := os.Getenv("AZURE_LOCATION")
-	galleryName := "GalleryInstantiation"
+	galleryName := "GalleryInstantiation1"
 
 	gallery := armcompute.Gallery{
 		Location: &galleryLocation,
