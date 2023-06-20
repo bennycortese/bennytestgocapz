@@ -44,12 +44,22 @@ func main() {
 
 	ctx := context.Background()
 
+	machinePoolName := "machinepool-7241-mp-0"
+
+	mp := &clusterv1exp.MachinePool{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: "default",
+			Name:      machinePoolName,
+		},
+	}
+
 	amp := &infrav1exp.AzureMachinePool{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
-			Name:      "machinepool-12922-mp-0",
+			Name:      machinePoolName,
 		},
 	}
+
 	err = c.Get(context.TODO(), client.ObjectKeyFromObject(amp), amp)
 	if err != nil {
 		panic(err)
@@ -69,7 +79,7 @@ func main() {
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
-				Name:      "machinepool-12922-mp-0-" + strconv.Itoa(i),
+				Name:      machinePoolName + "-" + strconv.Itoa(i),
 			},
 		}
 		err = c.Get(context.TODO(), client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
@@ -90,7 +100,7 @@ func main() {
 
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi-quickstart"},
+		ObjectMeta: metav1.ObjectMeta{Name: "capi-quickstart-rg"},
 	}
 
 	clusterScope, err := scope.NewClusterScope(context.Background(), scope.ClusterScopeParams{
@@ -105,24 +115,24 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "capi-quickstart",
+				ResourceGroup: "capi-quickstart-rg",
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-vnet", ResourceGroup: "capi-quickstart"},
+					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "capi-quickstart-rg"},
 				},
 			},
 		},
 	})
 
-	err, myscope := scope.NewMachinePoolMachineScope(scope.MachinePoolMachineScopeParams{
+	
+	myscope, err := scope.NewMachinePoolMachineScope(scope.MachinePoolMachineScopeParams{
 		Client:                  c,
-		//MachinePool:             new(expv1.MachinePool),
+		MachinePool:             mp,
 		AzureMachinePool:        amp,
 		AzureMachinePoolMachine: healthyAmpm,
 		ClusterScope:            clusterScope,
 	})
 	
-
-	//myscope.CordonAndDrain(ctx)
+	fmt.Println(myscope.IsReady())
 
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
@@ -142,7 +152,7 @@ func main() {
 		log.Fatalf("failed to create gallery: %v", err)
 	}
 
-	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart", galleryName, gallery, nil)
+	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, gallery, nil)
 
 	imageFactory, err := armcompute.NewImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
@@ -154,12 +164,12 @@ func main() {
 		log.Fatalf("failed to create snapshotFactory: %v", err)
 	}
 
-	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart", "example-snapshot", armcompute.Snapshot{
+	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "example-snapshot", armcompute.Snapshot{
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
 				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
-				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-fsw4x_OSDisk"),
+				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART-RG/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-gfpz4_OSDisk"),
 			},
 		},
 	}, nil)
@@ -168,7 +178,7 @@ func main() {
 		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
-	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart", "example-snapshot", nil)
+	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
 
 	if error != nil {
 		log.Fatalf("failed to delete snapshot: %v", error)
