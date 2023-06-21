@@ -231,13 +231,41 @@ func main() {
 				SKU:       to.Ptr("mySkuName"),
 			},
 			OSState: to.Ptr(armcompute.OperatingSystemStateTypesGeneralized),
-			OSType:  to.Ptr(armcompute.OperatingSystemTypesWindows),
+			OSType:  to.Ptr(armcompute.OperatingSystemTypesLinux),
 		},
 	}, nil)
 
 	if error != nil {
 		log.Fatalf("failed to create image: %v", error)
 	}
+
+	galleryImageVersionFactory, err := armcompute.NewGalleryImageVersionsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create galleryImageVersionFactory: %v", err)
+	}
+
+	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, "CAPI-QUICKSTART-RG", galleryName, "myGalleryImage", "1.0.0", armcompute.GalleryImageVersion{
+		Location: to.Ptr("East US"),
+		Properties: &armcompute.GalleryImageVersionProperties{
+			SafetyProfile: &armcompute.GalleryImageVersionSafetyProfile{
+				AllowDeletionOfReplicatedLocations: to.Ptr(false),
+			},
+			StorageProfile: &armcompute.GalleryImageVersionStorageProfile{
+				OSDiskImage: &armcompute.GalleryOSDiskImage{
+					Source: &armcompute.GalleryDiskImageSource{
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + "CAPI-QUICKSTART-RG" + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
+					},
+				},
+			},
+		},
+	}, nil)
+
+	if err != nil {
+		log.Fatalf("failed to finish the request: %v", err)
+	}
+
+	_ = poller
+	_ = galleryImageVersionFactory
 
 	_ = galleryFactory
 	_ = clientFactory
