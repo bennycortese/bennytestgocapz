@@ -170,9 +170,9 @@ func main() {
 
 	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, gallery, nil)
 
-	imageFactory, err := armcompute.NewImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	galleryImageFactory, err := armcompute.NewGalleryImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
-		log.Fatalf("failed to create imageFactory: %v", err)
+		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
 
 	snapshotFactory, err := armcompute.NewSnapshotsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
@@ -201,12 +201,10 @@ func main() {
 	}*/
 
 	
-
-
-	
-	_ , error = imageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "myImage", armcompute.Image{
+	/*
+	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, "myGalleryImage", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
-		Properties: &armcompute.ImageProperties{
+		Properties: &armcompute.GalleryImageProperties{
 			StorageProfile: &armcompute.ImageStorageProfile{
 				OSDisk: &armcompute.ImageOSDisk{
 					Snapshot: &armcompute.SubResource{
@@ -219,7 +217,23 @@ func main() {
 			},
 		},
 	}, nil)
-	_ = imageFactory
+	*/
+
+
+	
+	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, "myGalleryImage", armcompute.GalleryImage{
+		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
+		Properties: &armcompute.GalleryImageProperties{
+			HyperVGeneration: to.Ptr(armcompute.HyperVGenerationV1),
+			Identifier: &armcompute.GalleryImageIdentifier{
+				Offer:     to.Ptr("myOfferName"),
+				Publisher: to.Ptr("myPublisherName"),
+				SKU:       to.Ptr("mySkuName"),
+			},
+			OSState: to.Ptr(armcompute.OperatingSystemStateTypesGeneralized),
+			OSType:  to.Ptr(armcompute.OperatingSystemTypesWindows),
+		},
+	}, nil)
 
 	if error != nil {
 		log.Fatalf("failed to create image: %v", error)
