@@ -13,8 +13,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/kubernetes/scheme"
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-azure/exp/api/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
@@ -31,7 +31,7 @@ func main() {
 		panic(err)
 	}
 
-	s := runtime.NewScheme()
+	s := scheme.Scheme
 	infrav1exp.AddToScheme(s)
 	infrav1.AddToScheme(s)
 	clusterv1exp.AddToScheme(s)
@@ -105,7 +105,7 @@ func main() {
 
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "capi-quickstart-rg"},
+		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-7241"},
 	}
 
 	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
@@ -120,9 +120,9 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "capi-quickstart-rg",
+				ResourceGroup: "machinepool-7241",
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "capi-quickstart-rg"},
+					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "machinepool-7241"},
 				},
 			},
 		},
@@ -137,8 +137,11 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 	
-	Node1, found, err := myscope.GetNode(ctx)
-	fmt.Println(Node1, found, " ", err)
+	
+	err = myscope.CordonAndDrain(ctx)
+	if err != nil {
+		log.Fatalf("failed to drain: %v", err)
+	}
 	
 
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
@@ -185,25 +188,23 @@ func main() {
 		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
-	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
+	/*_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
 
 	if error != nil {
 		log.Fatalf("failed to delete snapshot: %v", error)
-	}
+	}*/
 
 	
 
 
-	_ = imageFactory
-	_ = snapshotFactory
-	/*
-	imageFactory.BeginCreateOrUpdate(ctx, "myResourceGroup", "myImage", armcompute.Image{
-		Location: to.Ptr("West US"),
+	
+	imageFactory.BeginCreateOrUpdate(ctx, os.Getenv("AZURE_SUBSCRIPTION_ID"), "myImage", armcompute.Image{
+		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.ImageProperties{
 			StorageProfile: &armcompute.ImageStorageProfile{
 				OSDisk: &armcompute.ImageOSDisk{
 					Snapshot: &armcompute.SubResource{
-						ID: to.Ptr("subscriptions/{subscription-id}/resourceGroups/myResourceGroup/providers/Microsoft.Compute/snapshots/mySnapshot"),
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + "CAPI-QUICKSTART-RG" + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
 					},
 					OSState: to.Ptr(armcompute.OperatingSystemStateTypesGeneralized),
 					OSType:  to.Ptr(armcompute.OperatingSystemTypesLinux),
@@ -211,7 +212,8 @@ func main() {
 				ZoneResilient: to.Ptr(false),
 			},
 		},
-	}, nil)*/ 
+	}, nil)
+	_ = imageFactory
 
 
 	//amp.CordonAndDrain();
