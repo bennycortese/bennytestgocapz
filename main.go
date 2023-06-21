@@ -44,7 +44,7 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolName := "machinepool-7241-mp-0"
+	machinePoolName := "machinepool-11435-mp-0"
 
 	mp := &clusterv1exp.MachinePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -105,7 +105,7 @@ func main() {
 
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-7241"},
+		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-11435"},
 	}
 
 	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
@@ -120,9 +120,9 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "machinepool-7241",
+				ResourceGroup: "machinepool-11435",
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "machinepool-7241"},
+					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "machinepool-11435"},
 				},
 			},
 		},
@@ -137,12 +137,18 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 	
-	
+	/*
 	err = myscope.CordonAndDrain(ctx)
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
+	}*/
+	val1, val2, err := myscope.GetNode(ctx)
+	if err != nil {
+		log.Fatalf("failed to drain: %v", err)
 	}
-	
+	_ = val1
+	_ = val2
+	//fmt.Println(val1, " ", val2)
 
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
@@ -198,7 +204,7 @@ func main() {
 
 
 	
-	imageFactory.BeginCreateOrUpdate(ctx, os.Getenv("AZURE_SUBSCRIPTION_ID"), "myImage", armcompute.Image{
+	_ , error = imageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "myImage", armcompute.Image{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.ImageProperties{
 			StorageProfile: &armcompute.ImageStorageProfile{
@@ -215,8 +221,9 @@ func main() {
 	}, nil)
 	_ = imageFactory
 
-
-	//amp.CordonAndDrain();
+	if error != nil {
+		log.Fatalf("failed to create image: %v", error)
+	}
 
 	_ = galleryFactory
 	_ = clientFactory
