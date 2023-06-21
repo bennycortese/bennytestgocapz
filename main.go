@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/Azure/go-autorest/autorest"
+	kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
 )
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
@@ -69,7 +70,7 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("provider id:", amp.Spec.ProviderID)
+	//fmt.Println("provider id:", amp.Spec.ProviderID)
 
 	replicaCount := amp.Status.Replicas
 
@@ -93,7 +94,7 @@ func main() {
 		}
 		
 	}
-	fmt.Println(healthyAmpm)
+	//fmt.Println(healthyAmpm)
 	//ampMachines := amp.AzureMachinePoolList
 	//fmt.Println(ampMachines)
 	
@@ -137,17 +138,19 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 	
-	/*
+	
 	err = myscope.CordonAndDrain(ctx)
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
-	}*/
-	val1, val2, err := myscope.GetNode(ctx)
+	}
+
+	fmt.Println(healthyAmpm)
+	/*val1, val2, err := myscope.GetNode(ctx)
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
-	}
-	_ = val1
-	_ = val2
+	}*/
+	/*_ = val1
+	_ = val2*/
 	//fmt.Println(val1, " ", val2)
 
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
@@ -192,6 +195,34 @@ func main() {
 
 	if error != nil {
 		log.Fatalf("failed to create snapshot: %v", error)
+	}
+
+	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, .client, client.ObjectKey{
+		Name:      .ClusterName(),
+		Namespace: s.AzureMachinePoolMachine.Namespace,
+	})
+
+
+	drainer := &kubedrain.Helper{
+		Client:              kubeClient,
+		Ctx:                 ctx,
+		Force:               true,
+		IgnoreAllDaemonSets: true,
+		DeleteEmptyDirData:  true,
+		GracePeriodSeconds:  -1,
+		// If a pod is not evicted in 20 seconds, retry the eviction next time the
+		// machine gets reconciled again (to allow other machines to be reconciled).
+		Timeout: 20 * time.Second,
+		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
+			verbStr := "Deleted"
+			if usingEviction {
+				verbStr = "Evicted"
+			}
+			log.V(4).Info(fmt.Sprintf("%s pod from Node", verbStr),
+				"pod", fmt.Sprintf("%s/%s", pod.Name, pod.Namespace))
+		},
+		Out:    writer{klog.Info},
+		ErrOut: writer{klog.Error},
 	}
 
 	/*_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
