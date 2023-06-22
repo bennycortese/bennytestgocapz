@@ -23,7 +23,7 @@ import (
 	"github.com/Azure/go-autorest/autorest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	//kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
-	//"sigs.k8s.io/cluster-api/controllers/remote"
+	"sigs.k8s.io/cluster-api/controllers/remote"
 )
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
@@ -210,9 +210,9 @@ func main() {
 	}
 	_ = node
 
-	//MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
+	MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
 
-	/*restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, myscope.client, client.ObjectKey{
+	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, myscope.client, client.ObjectKey{
 		Name:      myscope.ClusterName(),
 		Namespace: myscope.AzureMachinePoolMachine.Namespace,
 	})
@@ -221,7 +221,7 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
-	}*/
+	}
 
 	/*
 	drainer := &kubedrain.Helper{
