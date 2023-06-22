@@ -20,9 +20,10 @@ import (
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
 	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"github.com/Azure/go-autorest/autorest"
-	kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
+	//"sigs.k8s.io/controller-runtime/pkg/client"
+	//kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
+	//"sigs.k8s.io/cluster-api/controllers/remote"
 )
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
@@ -137,6 +138,10 @@ func main() {
 		AzureMachinePoolMachine: healthyAmpm,
 		ClusterScope:            clusterScope,
 	})
+
+	//fmt.Printf(client)
+
+	fmt.Printf("Person struct: %v\n", myscope)
 	
 	
 	err = myscope.CordonAndDrain(ctx)
@@ -197,12 +202,28 @@ func main() {
 		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
-	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, .client, client.ObjectKey{
-		Name:      .ClusterName(),
-		Namespace: s.AzureMachinePoolMachine.Namespace,
+	node, found, err := myscope.GetNode(ctx)
+	if err != nil {
+		log.Fatalf("failed to find node: %v", err)
+	} else if !found {
+		log.Fatalf("failed to find node with the ProviderID")
+	}
+	_ = node
+
+	//MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
+
+	/*restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, myscope.client, client.ObjectKey{
+		Name:      myscope.ClusterName(),
+		Namespace: myscope.AzureMachinePoolMachine.Namespace,
 	})
 
+	_ = restConfig
 
+	if err != nil {
+		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
+	}*/
+
+	/*
 	drainer := &kubedrain.Helper{
 		Client:              kubeClient,
 		Ctx:                 ctx,
@@ -223,7 +244,7 @@ func main() {
 		},
 		Out:    writer{klog.Info},
 		ErrOut: writer{klog.Error},
-	}
+	}*/
 
 	/*_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
 
