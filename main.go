@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -22,9 +23,22 @@ import (
 	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
 	"github.com/Azure/go-autorest/autorest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	//kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
+	kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
 	"sigs.k8s.io/cluster-api/controllers/remote"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 )
+
+type writer struct {
+	logFunc func(args ...interface{})
+}
+
+// Write passes string(p) into writer's logFunc and always returns len(p).
+func (w writer) Write(p []byte) (n int, err error) {
+	w.logFunc(string(p))
+	return len(p), nil
+}
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
 func main() {
@@ -139,17 +153,12 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 
-	//fmt.Printf(client)
-
-	fmt.Printf("Person struct: %v\n", myscope)
-	
-	
 	err = myscope.CordonAndDrain(ctx)
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
 	}
 
-	fmt.Println(healthyAmpm)
+	//fmt.Println(healthyAmpm)
 	/*val1, val2, err := myscope.GetNode(ctx)
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
@@ -208,20 +217,53 @@ func main() {
 	} else if !found {
 		log.Fatalf("failed to find node with the ProviderID")
 	}
-	_ = node
 
+	
 	MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
 
-	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, myscope.client, client.ObjectKey{
+	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, c, client.ObjectKey{
 		Name:      myscope.ClusterName(),
 		Namespace: myscope.AzureMachinePoolMachine.Namespace,
 	})
 
-	_ = restConfig
-
 	if err != nil {
 		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
 	}
+
+	kubeClient, err := kubernetes.NewForConfig(restConfig)
+	
+	if err != nil {
+		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
+	}
+
+
+	drainer := &kubedrain.Helper{
+		Client:              kubeClient,
+		Ctx:                 ctx,
+		Force:               true,
+		IgnoreAllDaemonSets: true,
+		DeleteEmptyDirData:  true,
+		GracePeriodSeconds:  -1,
+		// If a pod is not evicted in 20 seconds, retry the eviction next time the
+		// machine gets reconciled again (to allow other machines to be reconciled).
+		Timeout: 20 * time.Second,
+		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
+			usingEviction = false
+		},
+		Out:    writer{klog.Info},
+		ErrOut: writer{klog.Error},
+	}
+	_ = drainer
+
+	fmt.Println(node.Spec.Unschedulable)
+	//cordonHelper := kubedrain.NewCordonHelper(node)
+
+	
+	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil {
+		fmt.Println("Failed to uncordon")
+	}
+
+	fmt.Println(node.Spec.Unschedulable)
 
 	/*
 	drainer := &kubedrain.Helper{
