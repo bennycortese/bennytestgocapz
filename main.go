@@ -85,8 +85,6 @@ func main() {
 		panic(err)
 	}
 
-	//fmt.Println("provider id:", amp.Spec.ProviderID)
-
 	replicaCount := amp.Status.Replicas
 
 	healthyAmpm := &infrav1exp.AzureMachinePoolMachine{
@@ -96,7 +94,7 @@ func main() {
 		},
 	}
 
-	for i := 0; i < int(replicaCount); i++ {
+	for i := 0; i < int(replicaCount); i++ { // step 1
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
@@ -106,19 +104,13 @@ func main() {
 		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
-		}
-		
+		}	
 	}
-	//fmt.Println(healthyAmpm)
-	//ampMachines := amp.AzureMachinePoolList
-	//fmt.Println(ampMachines)
-	
 	
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
 	}
-
 
 	cluster := &clusterv1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-11435"},
@@ -144,7 +136,6 @@ func main() {
 		},
 	})
 
-	
 	myscope, err := scope.NewMachinePoolMachineScope(scope.MachinePoolMachineScopeParams{
 		Client:                  c,
 		MachinePool:             mp,
@@ -153,43 +144,9 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 
-	err = myscope.CordonAndDrain(ctx)
+	err = myscope.CordonAndDrain(ctx) // step 2
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
-	}
-
-	//fmt.Println(healthyAmpm)
-	/*val1, val2, err := myscope.GetNode(ctx)
-	if err != nil {
-		log.Fatalf("failed to drain: %v", err)
-	}*/
-	/*_ = val1
-	_ = val2*/
-	//fmt.Println(val1, " ", val2)
-
-	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
-	if err != nil {
-		log.Fatalf("failed to create client: %v", err)
-	}
-
-	galleryLocation := os.Getenv("AZURE_LOCATION")
-	galleryName := "GalleryInstantiation1"
-
-	gallery := armcompute.Gallery{
-		Location: &galleryLocation,
-	}
-	
-
-	galleryFactory, err := armcompute.NewGalleriesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
-	if err != nil {
-		log.Fatalf("failed to create gallery: %v", err)
-	}
-
-	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, gallery, nil)
-
-	galleryImageFactory, err := armcompute.NewGalleryImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
-	if err != nil {
-		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
 
 	snapshotFactory, err := armcompute.NewSnapshotsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
@@ -197,7 +154,7 @@ func main() {
 		log.Fatalf("failed to create snapshotFactory: %v", err)
 	}
 
-	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "example-snapshot", armcompute.Snapshot{
+	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "example-snapshot", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
@@ -218,7 +175,6 @@ func main() {
 		log.Fatalf("failed to find node with the ProviderID")
 	}
 
-	
 	MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
 
 	restConfig, err := remote.RESTConfig(ctx, MachinePoolMachineScopeName, c, client.ObjectKey{
@@ -236,7 +192,6 @@ func main() {
 		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
 	}
 
-
 	drainer := &kubedrain.Helper{
 		Client:              kubeClient,
 		Ctx:                 ctx,
@@ -244,8 +199,6 @@ func main() {
 		IgnoreAllDaemonSets: true,
 		DeleteEmptyDirData:  true,
 		GracePeriodSeconds:  -1,
-		// If a pod is not evicted in 20 seconds, retry the eviction next time the
-		// machine gets reconciled again (to allow other machines to be reconciled).
 		Timeout: 20 * time.Second,
 		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
 			usingEviction = false
@@ -253,67 +206,29 @@ func main() {
 		Out:    writer{klog.Info},
 		ErrOut: writer{klog.Error},
 	}
-	_ = drainer
-
-	fmt.Println(node.Spec.Unschedulable)
-	//cordonHelper := kubedrain.NewCordonHelper(node)
-
 	
-	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil {
+	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil { // step 4
 		fmt.Println("Failed to uncordon")
 	}
 
-	fmt.Println(node.Spec.Unschedulable)
+	galleryLocation := os.Getenv("AZURE_LOCATION")
+	galleryName := "GalleryInstantiation1"
 
-	/*
-	drainer := &kubedrain.Helper{
-		Client:              kubeClient,
-		Ctx:                 ctx,
-		Force:               true,
-		IgnoreAllDaemonSets: true,
-		DeleteEmptyDirData:  true,
-		GracePeriodSeconds:  -1,
-		// If a pod is not evicted in 20 seconds, retry the eviction next time the
-		// machine gets reconciled again (to allow other machines to be reconciled).
-		Timeout: 20 * time.Second,
-		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
-			verbStr := "Deleted"
-			if usingEviction {
-				verbStr = "Evicted"
-			}
-			log.V(4).Info(fmt.Sprintf("%s pod from Node", verbStr),
-				"pod", fmt.Sprintf("%s/%s", pod.Name, pod.Namespace))
-		},
-		Out:    writer{klog.Info},
-		ErrOut: writer{klog.Error},
-	}*/
-
-	/*_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil)
-
-	if error != nil {
-		log.Fatalf("failed to delete snapshot: %v", error)
-	}*/
-
+	gallery := armcompute.Gallery{
+		Location: &galleryLocation,
+	}
 	
-	/*
-	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, "myGalleryImage", armcompute.GalleryImage{
-		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
-		Properties: &armcompute.GalleryImageProperties{
-			StorageProfile: &armcompute.ImageStorageProfile{
-				OSDisk: &armcompute.ImageOSDisk{
-					Snapshot: &armcompute.SubResource{
-						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + "CAPI-QUICKSTART-RG" + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
-					},
-					OSState: to.Ptr(armcompute.OperatingSystemStateTypesGeneralized),
-					OSType:  to.Ptr(armcompute.OperatingSystemTypesLinux),
-				},
-				ZoneResilient: to.Ptr(false),
-			},
-		},
-	}, nil)
-	*/
+	galleryFactory, err := armcompute.NewGalleriesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create gallery: %v", err)
+	}
 
+	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, gallery, nil)
 
+	galleryImageFactory, err := armcompute.NewGalleryImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create galleryImageFactory: %v", err)
+	}
 	
 	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, "myGalleryImage", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
@@ -352,42 +267,17 @@ func main() {
 				},
 			},
 		},
-	}, nil)
+	}, nil) // step 5
 
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
+	} 
+	_ = poller
+
+	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil) // step 6
+
+	if error != nil {
+		log.Fatalf("failed to delete snapshot: %v", error)
 	}
 
-	_ = poller
-	_ = galleryImageVersionFactory
-
-	_ = galleryFactory
-	_ = clientFactory
-	
-	/*
-	galleryFactory.BeginCreateOrUpdate()
-
-	res, err := clientFactory.NewSharedGalleryImagesClient(clientFactory)
-if err != nil {
-	log.Fatalf("failed to finish the request: %v", err)
-}*/
-
-	/*
-	res, err := clientFactory.NewSharedGalleriesClient().Get(ctx, "eastus", "galleryUniqueName", nil)
-	if err != nil {
-		log.Fatalf("failed to finish the request: %v", err)
-	}*/
-	// You could use response here. We use blank identifier for just demo purposes.
-	
-	/*
-	_ = res*/
-	
-	// If the HTTP response code is 200 as defined in example definition, your response structure would look as follows. Please pay attention that all the values in the output are fake values for just demo purposes.
-	// res.SharedGallery = armcompute.SharedGallery{
-	// 	Name: to.Ptr("myGalleryName"),
-	// 	Location: to.Ptr("myLocation"),
-	// 	Identifier: &armcompute.SharedGalleryIdentifier{
-	// 		UniqueID: to.Ptr("/SharedGalleries/galleryUniqueName"),
-	// 	},
-	// }
 }
