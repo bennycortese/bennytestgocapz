@@ -7,6 +7,9 @@ import (
 	"os"
 	"strconv"
 	"time"
+	//"strings"
+	//"os/exec"
+	//"bytes"
 
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
@@ -28,6 +31,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	//"k8s.io/client-go/tools/remotecommand"
 )
 
 type writer struct {
@@ -38,6 +42,30 @@ type writer struct {
 func (w writer) Write(p []byte) (n int, err error) {
 	w.logFunc(string(p))
 	return len(p), nil
+}
+
+func waitForPodRunning(clientset *kubernetes.Clientset, namespace, name string) (*corev1.Pod, error) {
+	ctx := context.TODO()
+
+	timeout := 5 * time.Minute
+	deadline := time.Now().Add(timeout)
+
+	for {
+		pod, err := clientset.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+
+		if pod.Status.Phase == corev1.PodRunning {
+			return pod, nil
+		}
+
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("timeout waiting for pod to reach Running phase")
+		}
+
+		time.Sleep(5 * time.Second)
+	}
 }
 
 // Generated from example definition: https://github.com/Azure/azure-rest-api-specs/blob/5d2adf9b7fda669b4a2538c65e937ee74fe3f966/specification/compute/resource-manager/Microsoft.Compute/GalleryRP/stable/2022-03-03/examples/sharedGalleryExamples/SharedGallery_Get.json
@@ -60,7 +88,9 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolName := "machinepool-11435-mp-0"
+	machinePoolName := "machinepool-25514-mp-0"
+
+	resourceGroupName := "capi-quickstart"
 
 	mp := &clusterv1exp.MachinePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -113,7 +143,7 @@ func main() {
 	}
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-11435"},
+		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-25514"},
 	}
 
 	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
@@ -128,9 +158,9 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "machinepool-11435",
+				ResourceGroup: "machinepool-25514",
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: "capi-quickstart-rg-vnet", ResourceGroup: "machinepool-11435"},
+					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: "machinepool-25514"},
 				},
 			},
 		},
@@ -154,12 +184,12 @@ func main() {
 		log.Fatalf("failed to create snapshotFactory: %v", err)
 	}
 
-	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", "example-snapshot", armcompute.Snapshot{ // step 3
+	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
 				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
-				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/CAPI-QUICKSTART-RG/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-gfpz4_OSDisk"),
+				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-8h9dd_OSDisk"),
 			},
 		},
 	}, nil)
@@ -191,7 +221,92 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
 	}
+	
 
+	var nodeAddress string
+	for _, address := range node.Status.Addresses {
+    	if address.Type == corev1.NodeInternalIP || address.Type == corev1.NodeHostName {
+        	nodeAddress = address.Address
+        	break
+    	}
+	}
+
+	if nodeAddress == "" {
+    	panic("Failed to retrieve the node's address")
+	}
+
+	fmt.Println(nodeAddress)
+
+	_ = nodeAddress
+
+	get_sleep := "apk add --no-cache coreutils"
+	sleepy := "sleep 4"
+	cat_test := "cat /etc/hostname && echo \"\" > /etc/hostname"
+	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instance /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
+	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
+	command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + cat_test}
+	//command := []string{"sh", "-c", cat_test}
+
+
+	runAsUser := int64(0)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "exec-pod-",
+		},
+		Spec: corev1.PodSpec{
+			NodeName:   node.GetName(),
+			Containers: []corev1.Container{
+				{
+					Name:  "exec-container",
+					Image: "alpine:latest", // Replace with your desired image
+					Command: command,
+					SecurityContext: &corev1.SecurityContext{
+						RunAsUser: &runAsUser, // Run as root user
+					},
+				},
+			},
+			RestartPolicy: corev1.RestartPolicyNever,
+		},
+	}
+	
+	createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+	if err != nil {
+		panic(err)
+	}
+	_ = createdPod
+	/*
+	waitForPodRunning(kubeClient, createdPod.Namespace, createdPod.Name)
+	
+
+	req := kubeClient.CoreV1().RESTClient().Post().Resource("pods").Name(pod.GetName()).
+		Namespace(createdPod.GetNamespace()).SubResource("exec")
+	option := &corev1.PodExecOptions{
+		Command: command,
+		Stdin:   false,
+		Stdout:  true,
+		Stderr:  true,
+		TTY:     true,
+	}
+	req.VersionedParams(
+		option,
+		scheme.ParameterCodec,
+	)
+	exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
+	if err != nil {
+		panic("AHH")
+	}
+
+	var stdout, stderr bytes.Buffer
+
+	exec.Stream(remotecommand.StreamOptions{
+		Stdin:  nil,
+		Stdout: &stdout,
+		Stderr: &stderr,
+	})
+
+	fmt.Println("Output:", stdout.String())
+	fmt.Println("Error:", stderr.String())
+	*/
 	drainer := &kubedrain.Helper{
 		Client:              kubeClient,
 		Ctx:                 ctx,
@@ -223,14 +338,14 @@ func main() {
 		log.Fatalf("failed to create gallery: %v", err)
 	}
 
-	galleryFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, gallery, nil)
+	galleryFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, gallery, nil)
 
 	galleryImageFactory, err := armcompute.NewGalleryImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
 	
-	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, "capi-quickstart-rg", galleryName, "myGalleryImage", armcompute.GalleryImage{
+	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.GalleryImageProperties{
 			HyperVGeneration: to.Ptr(armcompute.HyperVGenerationV1),
@@ -253,7 +368,7 @@ func main() {
 		log.Fatalf("failed to create galleryImageVersionFactory: %v", err)
 	}
 
-	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, "CAPI-QUICKSTART-RG", galleryName, "myGalleryImage", "1.0.0", armcompute.GalleryImageVersion{
+	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.0", armcompute.GalleryImageVersion{
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.GalleryImageVersionProperties{
 			SafetyProfile: &armcompute.GalleryImageVersionSafetyProfile{
@@ -262,7 +377,7 @@ func main() {
 			StorageProfile: &armcompute.GalleryImageVersionStorageProfile{
 				OSDiskImage: &armcompute.GalleryOSDiskImage{
 					Source: &armcompute.GalleryDiskImageSource{
-						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + "CAPI-QUICKSTART-RG" + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
 					},
 				},
 			},
@@ -274,10 +389,11 @@ func main() {
 	} 
 	_ = poller
 
-	_ , error = snapshotFactory.BeginDelete(ctx, "capi-quickstart-rg", "example-snapshot", nil) // step 6
+	_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
 
 	if error != nil {
 		log.Fatalf("failed to delete snapshot: %v", error)
 	}
 
 }
+// force update capzcontrolplanemanager can be used for check, can also just add annotation/label to edit at all for reconcile, may need to play around
