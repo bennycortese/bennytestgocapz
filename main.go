@@ -171,6 +171,7 @@ func main() {
 					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: "machinepool-27367"},
 				},
 			},
+			
 		},
 	})
 
@@ -185,26 +186,6 @@ func main() {
 	err = myscope.CordonAndDrain(ctx) // step 2
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
-	}
-
-	snapshotFactory, err := armcompute.NewSnapshotsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
-	if err != nil {
-		log.Fatalf("failed to create snapshotFactory: %v", err)
-	}
-
-	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
-		Location: to.Ptr("East US"),
-		Properties: &armcompute.SnapshotProperties{
-			CreationData: &armcompute.CreationData{
-				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
-				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-8h9dd_OSDisk"),
-				//SourceURI: to.Ptr("subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/machinepool-27367/providers/Microsoft.Compute/virtualMachineScaleSets/machinepool-27367-mp-0/virtualMachines/0"),
-			},
-		},
-	}, nil)
-
-	if error != nil {
-		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
 	node, found, err := myscope.GetNode(ctx)
@@ -279,15 +260,19 @@ func main() {
 					},
 				},
 			},
+			NodeSelector : map[string]string{
+				"kubernetes.io/hostname": node.Name,
+			},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
 	
-	createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+	/*createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		panic(err)
 	}
-	_ = createdPod
+	_ = createdPod*/
+	_ = pod
 
 	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
 	resourceGroup := "machinepool-27367"
@@ -326,6 +311,25 @@ func main() {
 	}
 	if *osDisk == "nil" {
 		panic("Disk not found")
+	}
+
+	snapshotFactory, err := armcompute.NewSnapshotsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
+	if err != nil {
+		log.Fatalf("failed to create snapshotFactory: %v", err)
+	}
+
+	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
+		Location: to.Ptr("East US"),
+		Properties: &armcompute.SnapshotProperties{
+			CreationData: &armcompute.CreationData{
+				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
+				SourceURI:    osDisk,
+			},
+		},
+	}, nil)
+
+	if error != nil {
+		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
 	/*
@@ -443,6 +447,8 @@ func main() {
 	} 
 	_ = poller
 
+
+	
 	_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
 
 	if error != nil {
