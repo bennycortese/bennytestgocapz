@@ -31,7 +31,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
+	"github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute"
+	//"github.com/Azure/azure-sdk-for-go/services/preview/compute/mgmt/2020-12-01-preview/compute"
+	"github.com/Azure/go-autorest/autorest/azure/auth"
 	//"k8s.io/client-go/tools/remotecommand"
+
+	//"sigs.k8s.io/cluster-api-provider-azure/azure/converters"
 )
 
 type writer struct {
@@ -88,7 +93,7 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolName := "machinepool-25514-mp-0"
+	machinePoolName := "machinepool-27367-mp-0"
 
 	resourceGroupName := "capi-quickstart"
 
@@ -124,6 +129,8 @@ func main() {
 		},
 	}
 
+	curInstanceID := strconv.Itoa(0)
+
 	for i := 0; i < int(replicaCount); i++ { // step 1
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
@@ -131,6 +138,7 @@ func main() {
 				Name:      machinePoolName + "-" + strconv.Itoa(i),
 			},
 		}
+		curInstanceID = strconv.Itoa(i)
 		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
@@ -143,7 +151,7 @@ func main() {
 	}
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-25514"},
+		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-27367"},
 	}
 
 	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
@@ -158,9 +166,9 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "machinepool-25514",
+				ResourceGroup: "machinepool-27367",
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: "machinepool-25514"},
+					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: "machinepool-27367"},
 				},
 			},
 		},
@@ -190,6 +198,7 @@ func main() {
 			CreationData: &armcompute.CreationData{
 				CreateOption: to.Ptr(armcompute.DiskCreateOptionCopy),
 				SourceURI:    to.Ptr("/subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/disks/capi-quickstart-control-plane-8h9dd_OSDisk"),
+				//SourceURI: to.Ptr("subscriptions/addeefcb-5be9-41a9-91d6-3307915e1428/resourceGroups/machinepool-27367/providers/Microsoft.Compute/virtualMachineScaleSets/machinepool-27367-mp-0/virtualMachines/0"),
 			},
 		},
 	}, nil)
@@ -204,6 +213,11 @@ func main() {
 	} else if !found {
 		log.Fatalf("failed to find node with the ProviderID")
 	}
+
+	/*for _, image := range node.Status.Images {
+		fmt.Println(converters.ImageToSDK(image))
+	}*/
+	fmt.Println(node.Status.NodeInfo.OSImage)
 
 	MachinePoolMachineScopeName := "azuremachinepoolmachine-scope"
 
@@ -241,7 +255,7 @@ func main() {
 
 	get_sleep := "apk add --no-cache coreutils"
 	sleepy := "sleep 4"
-	cat_test := "cat /etc/hostname && echo \"\" > /etc/hostname"
+	cat_test := "cat /etc/hostname && /bin/cp /dev/null /etc/hostname"
 	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instance /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
 	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
 	command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + cat_test}
@@ -255,7 +269,7 @@ func main() {
 		},
 		Spec: corev1.PodSpec{
 			NodeName:   node.GetName(),
-			Containers: []corev1.Container{
+			Containers: []corev1.Container{ // Node specific selector
 				{
 					Name:  "exec-container",
 					Image: "alpine:latest", // Replace with your desired image
@@ -274,6 +288,46 @@ func main() {
 		panic(err)
 	}
 	_ = createdPod
+
+	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+	resourceGroup := "machinepool-27367"
+	vmssName := machinePoolName
+	_ = subscriptionID
+	_ = resourceGroup
+	//_ = nodeName
+
+	fmt.Println(os.Getenv("AZURE_CLIENT_ID"))
+	credConfig := auth.NewClientCredentialsConfig(os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET"), os.Getenv("AZURE_TENANT_ID"))
+	authorizer, err := credConfig.Authorizer()
+	if err != nil {
+		panic(err)
+	}
+
+	vmssClient := compute.NewVirtualMachineScaleSetsClient(subscriptionID)
+	vmssClient.Authorizer = authorizer
+
+	vmssVMsClient := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
+	vmssVMsClient.Authorizer = authorizer
+
+	vmssVMs, err := vmssVMsClient.List(context.Background(), resourceGroup, vmssName, "", "", "")
+	if err != nil {
+		panic(err)
+	}
+
+	osDisk := to.Ptr("nil")
+	for _, vm := range vmssVMs.Values() {
+		if vm.StorageProfile != nil && vm.StorageProfile.OsDisk.ManagedDisk != nil && vm.StorageProfile.OsDisk.ManagedDisk.ID != nil && *vm.InstanceID == curInstanceID {
+			osDisk = vm.StorageProfile.OsDisk.ManagedDisk.ID
+			fmt.Println(osDisk)
+			fmt.Printf("%T", osDisk)
+			fmt.Println("Instance ID:", *vm.InstanceID)
+			fmt.Println("OS Disk:", *osDisk)
+		}
+	}
+	if *osDisk == "nil" {
+		panic("Disk not found")
+	}
+
 	/*
 	waitForPodRunning(kubeClient, createdPod.Namespace, createdPod.Name)
 	
