@@ -237,7 +237,8 @@ func main() {
 
 	_ = nodeAddress
 
-	//get_sleep := "apk add --no-cache coreutils"
+	get_sleep := "apk add --no-cache coreutils && apk add tar"
+	apk_commands := "apk update && apk update && apk search curl && apk -a info curl && apk add curl"
 	//sleepy := "sleep 4"
 	//cat_test := "cat /etc/hostname && /bin/cp /dev/null /etc/hostname"
 	//rm_command := "/bin/rm -rf /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env /var/lib/cloud/data/* /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
@@ -245,15 +246,15 @@ func main() {
 
 	//insane_kubeadm_sequence_1 := "CNI_PLUGINS_VERSION=\"v1.3.0\" && ARCH=\"amd64\" && DEST=\"/opt/cni/bin\" && mkdir -p \"$DEST\""
 	//insane_kubeadm_sequence_2 := "curl -L \"https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-${ARCH}-${CNI_PLUGINS_VERSION}.tgz\" | tar -C \"$DEST\" -xz"
+	//insane_kubeadm_sequence_3 := "DOWNLOAD_DIR=\"/usr/local/bin\" && mkdir -p \"$DOWNLOAD_DIR\""
+	//insane_kubeadm_sequence_4 := "CRICTL_VERSION=\"v1.27.1\" ARCH=\"amd64\" curl -L \"https://github.com/kubernetes-sigs/cri-tools/releases/download/${CRICTL_VERSION}/crictl-${CRICTL_VERSION}-linux-${ARCH}.tar.gz\" | tar -C $DOWNLOAD_DIR -xz"
 
-
-	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 
+	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 + " && " + insane_kubeadm_sequence_3 + " && " + insane_kubeadm_sequence_4
 	//command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + insane_kubeadm_sequence}
 	//command := []string{"sh", "-c", cat_test}
 	//command = []string{"sh", "-c", "cat /etc/hostname"} // Todo - figure out what was supposed to be removed in /var/lib/cloud/instance, we need /var/lib/cloud/instance/scripts
-	//variations_on_a_cloud := "sed -i -e 's/us.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list"
-	apt_test := "wget http://security.ubuntu.com/ubuntu/pool/main/a/apt/apt-utils_2.7.1_amd64.deb -O apt.deb"
-	command := []string{"sh", "-c", apt_test}
+	insane_kubeadm_sequence := "wget https://storage.googleapis.com/kubernetes-release/release/v1.27.1/bin/linux/amd64/kubeadm && chmod +x kubeadm && echo y | ./kubeadm reset"
+	command := []string{"sh", "-c", get_sleep + " && " + apk_commands + " && " + insane_kubeadm_sequence}
 	runAsUser := int64(0)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
