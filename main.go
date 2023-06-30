@@ -93,7 +93,9 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolName := "machinepool-27367-mp-0"
+	machinePoolClusterName := "machinepool-11884"
+
+	machinePoolName := machinePoolClusterName + "-mp-0"
 
 	resourceGroupName := "capi-quickstart"
 
@@ -151,7 +153,7 @@ func main() {
 	}
 
 	cluster := &clusterv1.Cluster{
-		ObjectMeta: metav1.ObjectMeta{Name: "machinepool-27367"},
+		ObjectMeta: metav1.ObjectMeta{Name: machinePoolClusterName},
 	}
 
 	clusterScope, err := scope.NewClusterScope(ctx, scope.ClusterScopeParams{
@@ -166,9 +168,9 @@ func main() {
 					Location:       os.Getenv("AZURE_LOCATION"),
 					SubscriptionID: os.Getenv("AZURE_SUBSCRIPTION_ID"),
 				},
-				ResourceGroup: "machinepool-27367",
+				ResourceGroup: machinePoolClusterName,
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: "machinepool-27367"},
+					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: machinePoolClusterName},
 				},
 			},
 			
@@ -183,10 +185,11 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 
-	err = myscope.CordonAndDrain(ctx) // step 2
+	
+	/*err = myscope.CordonAndDrain(ctx) // step 2
 	if err != nil {
 		log.Fatalf("failed to drain: %v", err)
-	}
+	}*/
 
 	node, found, err := myscope.GetNode(ctx)
 	if err != nil {
@@ -234,15 +237,23 @@ func main() {
 
 	_ = nodeAddress
 
-	get_sleep := "apk add --no-cache coreutils"
-	sleepy := "sleep 4"
-	cat_test := "cat /etc/hostname && /bin/cp /dev/null /etc/hostname"
-	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instance /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
-	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
-	command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + cat_test}
+	//get_sleep := "apk add --no-cache coreutils"
+	//sleepy := "sleep 4"
+	//cat_test := "cat /etc/hostname && /bin/cp /dev/null /etc/hostname"
+	//rm_command := "/bin/rm -rf /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env /var/lib/cloud/data/* /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
+	//replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
+
+	//insane_kubeadm_sequence_1 := "CNI_PLUGINS_VERSION=\"v1.3.0\" && ARCH=\"amd64\" && DEST=\"/opt/cni/bin\" && mkdir -p \"$DEST\""
+	//insane_kubeadm_sequence_2 := "curl -L \"https://github.com/containernetworking/plugins/releases/download/${CNI_PLUGINS_VERSION}/cni-plugins-linux-${ARCH}-${CNI_PLUGINS_VERSION}.tgz\" | tar -C \"$DEST\" -xz"
+
+
+	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 
+	//command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + insane_kubeadm_sequence}
 	//command := []string{"sh", "-c", cat_test}
-
-
+	//command = []string{"sh", "-c", "cat /etc/hostname"} // Todo - figure out what was supposed to be removed in /var/lib/cloud/instance, we need /var/lib/cloud/instance/scripts
+	//variations_on_a_cloud := "sed -i -e 's/us.archive.ubuntu.com/archive.ubuntu.com/g' /etc/apt/sources.list"
+	apt_test := "wget http://security.ubuntu.com/ubuntu/pool/main/a/apt/apt-utils_2.7.1_amd64.deb -O apt.deb"
+	command := []string{"sh", "-c", apt_test}
 	runAsUser := int64(0)
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -267,15 +278,17 @@ func main() {
 		},
 	}
 	
-	/*createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
+	createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		panic(err)
 	}
-	_ = createdPod*/
+	_ = createdPod
 	_ = pod
 
+	time.Sleep(60 * time.Second)
+
 	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
-	resourceGroup := "machinepool-27367"
+	resourceGroup := machinePoolClusterName
 	vmssName := machinePoolName
 	_ = subscriptionID
 	_ = resourceGroup
@@ -379,10 +392,12 @@ func main() {
 		Out:    writer{klog.Info},
 		ErrOut: writer{klog.Error},
 	}
-	
+	_ = drainer
+	 
+	/*
 	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil { // step 4
 		fmt.Println("Failed to uncordon")
-	}
+	}*/
 
 	galleryLocation := os.Getenv("AZURE_LOCATION")
 	galleryName := "GalleryInstantiation1"
@@ -448,12 +463,12 @@ func main() {
 	_ = poller
 
 
-	
+	/*
 	_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
 
 	if error != nil {
 		log.Fatalf("failed to delete snapshot: %v", error)
-	}
+	}*/
 
 }
 // force update capzcontrolplanemanager can be used for check, can also just add annotation/label to edit at all for reconcile, may need to play around
