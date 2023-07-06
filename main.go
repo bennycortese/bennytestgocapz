@@ -137,7 +137,7 @@ func main() {
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
-				Name:      machinePoolName + "-" + "0",
+				Name:      machinePoolName + "-" + strconv.Itoa(i),
 			},
 		}
 		curInstanceID = strconv.Itoa(i)
@@ -185,6 +185,24 @@ func main() {
 		ClusterScope:            clusterScope,
 	})
 
+	gallery_image := infrav1.AzureComputeGalleryImage{
+		SubscriptionID: to.Ptr(os.Getenv("AZURE_SUBSCRIPTION_ID")),
+		ResourceGroup: to.Ptr(resourceGroupName),
+		Gallery: "GalleryInstantiation1",
+		Name: "myGalleryImage",
+		Version: "1.0.0",
+	}
+	fmt.Println(gallery_image)
+
+	new_image := infrav1.Image{
+		ComputeGallery: &gallery_image,
+	}
+
+	fmt.Println(new_image)
+
+	amp.Spec.Template.Image = &new_image
+
+	//fmt.Println(.Spec.Template.Image)
 	
 
 	node, found, err := myscope.GetNode(ctx)
@@ -193,6 +211,10 @@ func main() {
 	} else if !found {
 		log.Fatalf("failed to find node with the ProviderID")
 	}
+	fmt.Println("AH")
+	fmt.Println(node.Name)
+	fmt.Println( node.GetName())
+	fmt.Println("AH")
 
 	/*for _, image := range node.Status.Images {
 		fmt.Println(converters.ImageToSDK(image))
@@ -238,7 +260,7 @@ func main() {
 	sleepy := "sleep 4"
 	cat_test := "/bin/cp -f /dev/null /etc/hostname"
 	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
-	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id" 
+	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
 
 	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 + " && " + insane_kubeadm_sequence_3 + " && " + insane_kubeadm_sequence_4
 	//command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + insane_kubeadm_sequence}
@@ -254,7 +276,7 @@ func main() {
 	//kubeadm_install := "apt-get update && apt-get install -y apt-transport-https ca-certificates curl && " + kubeadm_step_3 + " && " + kubeadm_step_4 + " && " + kubeadm_step_5
 	
 	//kubeadm_reset := "kubeadm reset"
-	command := []string{"sh", "-c", sleepy + " && echo y | apt update && echo y | apt upgrade && echo y | apt-get install wget && " + insane_kubeadm_sequence + " && " + cat_test + " && " + rm_command +  " && " + replace_machine_id_command}
+	command := []string{"sh", "-c", sleepy + " && touch rock.txt && echo y | apt update && echo y | apt upgrade && echo y | apt-get install wget && " + insane_kubeadm_sequence + " && " + cat_test + " && " + rm_command +  " && " + replace_machine_id_command}
 	runAsUser := int64(0)
 	isTrue := true
 	pod := &corev1.Pod{
@@ -262,7 +284,7 @@ func main() {
 			GenerateName: "exec-pod-",
 		},
 		Spec: corev1.PodSpec{
-			NodeName:   node.GetName(),
+			NodeName:  node.Name,
 			HostNetwork: isTrue,
 			HostPID: isTrue,
 			Containers: []corev1.Container{ // Node specific selector
@@ -317,21 +339,13 @@ func main() {
 	vmssVMsClient := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
 	vmssVMsClient.Authorizer = authorizer
 
-	vmssVMs, err := vmssVMsClient.List(context.Background(), resourceGroup, vmssName, "", "", "")
+	vm, err := vmssVMsClient.Get(ctx, resourceGroup, vmssName, curInstanceID, "")
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to find VM")
 	}
+	osDisk := vm.StorageProfile.OsDisk.ManagedDisk.ID
+	fmt.Println("OS DISK: ", *osDisk)
 
-	osDisk := to.Ptr("nil")
-	for _, vm := range vmssVMs.Values() {
-		if vm.StorageProfile != nil && vm.StorageProfile.OsDisk.ManagedDisk != nil && vm.StorageProfile.OsDisk.ManagedDisk.ID != nil && *vm.InstanceID == curInstanceID {
-			osDisk = vm.StorageProfile.OsDisk.ManagedDisk.ID
-			fmt.Println(osDisk)
-			fmt.Printf("%T", osDisk)
-			fmt.Println("Instance ID:", *vm.InstanceID)
-			fmt.Println("OS Disk:", *osDisk)
-		}
-	}
 	if *osDisk == "nil" {
 		panic("Disk not found")
 	}
@@ -470,8 +484,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
 	} 
+
+	fmt.Printf("%T", poller)
 	_ = poller
 
+
+	
 
 	/*
 	_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
