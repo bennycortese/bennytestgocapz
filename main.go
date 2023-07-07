@@ -7,35 +7,35 @@ import (
 	"os"
 	"strconv"
 	"time"
+
 	//"strings"
 	//"os/exec"
 	//"bytes"
 
-
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 
+	"github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v5"
+	"github.com/Azure/go-autorest/autorest"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog/v2"
+	kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
 	infrav1 "sigs.k8s.io/cluster-api-provider-azure/api/v1beta1"
+	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
 	infrav1exp "sigs.k8s.io/cluster-api-provider-azure/exp/api/v1beta1"
 	clusterv1 "sigs.k8s.io/cluster-api/api/v1beta1"
-	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
-	"sigs.k8s.io/cluster-api-provider-azure/azure/scope"
-	"github.com/Azure/go-autorest/autorest"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	kubedrain "k8s.io/kubectl/pkg/drain" // go look at - https://github.com/kubernetes-sigs/cluster-api-provider-azure/blob/v1.9.2/azure/scope/machinepoolmachine.go#L372 for how to edit it
 	"sigs.k8s.io/cluster-api/controllers/remote"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
-	"github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute"
+	clusterv1exp "sigs.k8s.io/cluster-api/exp/api/v1beta1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	//"github.com/Azure/azure-sdk-for-go/services/preview/compute/mgmt/2020-12-01-preview/compute"
 	"github.com/Azure/go-autorest/autorest/azure/auth"
 	//"k8s.io/client-go/tools/remotecommand"
-
 	//"sigs.k8s.io/cluster-api-provider-azure/azure/converters"
 )
 
@@ -93,7 +93,7 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolClusterName := "machinepool-2287"
+	machinePoolClusterName := "machinepool-28681"
 
 	machinePoolName := machinePoolClusterName + "-mp-0"
 
@@ -121,7 +121,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
+	fmt.Println("here")
 	replicaCount := amp.Status.Replicas
 
 	healthyAmpm := &infrav1exp.AzureMachinePoolMachine{
@@ -144,9 +144,9 @@ func main() {
 		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
-		}	
+		}
 	}
-	
+
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
 		log.Fatalf("failed to obtain a credential: %v", err)
@@ -173,7 +173,6 @@ func main() {
 					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: machinePoolClusterName},
 				},
 			},
-			
 		},
 	})
 
@@ -187,10 +186,10 @@ func main() {
 
 	gallery_image := infrav1.AzureComputeGalleryImage{
 		SubscriptionID: to.Ptr(os.Getenv("AZURE_SUBSCRIPTION_ID")),
-		ResourceGroup: to.Ptr(resourceGroupName),
-		Gallery: "GalleryInstantiation1",
-		Name: "myGalleryImage",
-		Version: "1.0.0",
+		ResourceGroup:  to.Ptr(resourceGroupName),
+		Gallery:        "GalleryInstantiation1",
+		Name:           "myGalleryImage",
+		Version:        "1.0.0",
 	}
 	fmt.Println(gallery_image)
 
@@ -203,7 +202,6 @@ func main() {
 	amp.Spec.Template.Image = &new_image
 
 	//fmt.Println(.Spec.Template.Image)
-	
 
 	node, found, err := myscope.GetNode(ctx)
 	if err != nil {
@@ -213,7 +211,7 @@ func main() {
 	}
 	fmt.Println("AH")
 	fmt.Println(node.Name)
-	fmt.Println( node.GetName())
+	fmt.Println(node.GetName())
 	fmt.Println("AH")
 
 	/*for _, image := range node.Status.Images {
@@ -233,22 +231,21 @@ func main() {
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(restConfig)
-	
+
 	if err != nil {
 		log.Fatalf("Error creating a remote client while deleting Machine, won't retry: %v", err)
 	}
-	
 
 	var nodeAddress string
 	for _, address := range node.Status.Addresses {
-    	if address.Type == corev1.NodeInternalIP || address.Type == corev1.NodeHostName {
-        	nodeAddress = address.Address
-        	break
-    	}
+		if address.Type == corev1.NodeInternalIP || address.Type == corev1.NodeHostName {
+			nodeAddress = address.Address
+			break
+		}
 	}
 
 	if nodeAddress == "" {
-    	panic("Failed to retrieve the node's address")
+		panic("Failed to retrieve the node's address")
 	}
 
 	fmt.Println(nodeAddress)
@@ -258,25 +255,25 @@ func main() {
 	//get_sleep := "apk add --no-cache coreutils && apk add tar"
 	//apk_commands := "apk update && apk update && apk search curl && apk -a info curl && apk add curl"
 	sleepy := "sleep 4"
-	cat_test := "/bin/cp -f /dev/null /etc/hostname"
-	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
-	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
+	cat_test := "/host/bin/cp -f /host/dev/null /host/etc/hostname"
+	rm_command := "/host/bin/rm -rf /host/var/lib/cloud/data/* /host/var/lib/cloud/instances/* /host/var/lib/waagent/history/* /host/var/lib/waagent/events/* /host/var/log/journal/*"
+	replace_machine_id_command := "/host/bin/cp /host/dev/null /host/etc/machine-id"
 
 	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 + " && " + insane_kubeadm_sequence_3 + " && " + insane_kubeadm_sequence_4
 	//command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + insane_kubeadm_sequence}
 	//command := []string{"sh", "-c", cat_test}
 	//command = []string{"sh", "-c", "cat /etc/hostname"} // Todo - figure out what was supposed to be removed in /var/lib/cloud/instance, we need /var/lib/cloud/instance/scripts
-	insane_kubeadm_sequence := "wget https://storage.googleapis.com/kubernetes-release/release/v1.27.1/bin/linux/amd64/kubeadm && chmod +x kubeadm && echo y | ./kubeadm reset"
+	//insane_kubeadm_sequence := "wget https://storage.googleapis.com/kubernetes-release/release/v1.27.1/bin/linux/amd64/kubeadm && chmod +x kubeadm && echo y | ./kubeadm reset"
 	//command := []string{"sh", "-c", get_sleep + " && " + apk_commands + " && " + sleepy + " && " + insane_kubeadm_sequence + " && " + rm_command + " && " + replace_machine_id_command}
-
-	
+	//insane_kubeadm_sequence := "echo y | /host/usr/bin/kubeadm reset && echo y | /host/usr/bin/kubeadm init"
+	insane_kubeadm_sequence := "/host/bin/rm -rf /host/etc/kubernetes/kubelet.conf /host/etc/kubernetes/pki/ca.crt"
 	//kubeadm_step_3 := "curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg"
 	//kubeadm_step_4 := "echo \"deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main\" | tee /etc/apt/sources.list.d/kubernetes.list"
 	//kubeadm_step_5 := "apt-get update && apt-get install -y kubelet kubeadm kubectl && apt-mark hold kubelet kubeadm kubectl"
 	//kubeadm_install := "apt-get update && apt-get install -y apt-transport-https ca-certificates curl && " + kubeadm_step_3 + " && " + kubeadm_step_4 + " && " + kubeadm_step_5
-	
+	// && echo y | apt update && echo y | apt upgrade && echo y | apt-get install wget
 	//kubeadm_reset := "kubeadm reset"
-	command := []string{"sh", "-c", sleepy + " && touch rock.txt && echo y | apt update && echo y | apt upgrade && echo y | apt-get install wget && " + insane_kubeadm_sequence + " && " + cat_test + " && " + rm_command +  " && " + replace_machine_id_command}
+	command := []string{"sh", "-c", sleepy + " && /host/kill -9 1361 && touch /host/rock.txt && " + insane_kubeadm_sequence + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command}
 	runAsUser := int64(0)
 	isTrue := true
 	pod := &corev1.Pod{
@@ -284,27 +281,43 @@ func main() {
 			GenerateName: "exec-pod-",
 		},
 		Spec: corev1.PodSpec{
-			NodeName:  node.Name,
+			NodeName:    node.Name,
 			HostNetwork: isTrue,
-			HostPID: isTrue,
+			HostPID:     isTrue,
 			Containers: []corev1.Container{ // Node specific selector
 				{
-					Name:  "exec-container",
+					Name:    "exec-container",
 					Command: command,
-					Image: "ubuntu:latest",
+					Image:   "ubuntu:latest",
 					SecurityContext: &corev1.SecurityContext{
-						RunAsUser: &runAsUser, // Run as root user
+						RunAsUser:  &runAsUser, // Run as root user
 						Privileged: &isTrue,
+					},
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "host-root",
+							MountPath: "/host",
+						},
 					},
 				},
 			},
-			NodeSelector : map[string]string{
+			Volumes: []corev1.Volume{
+				{
+					Name: "host-root",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/",
+						},
+					},
+				},
+			},
+			NodeSelector: map[string]string{
 				"kubernetes.io/hostname": node.Name,
 			},
 			RestartPolicy: corev1.RestartPolicyNever,
 		},
 	}
-	
+
 	createdPod, err := kubeClient.CoreV1().Pods("default").Create(ctx, pod, metav1.CreateOptions{})
 	if err != nil {
 		panic(err)
@@ -355,7 +368,7 @@ func main() {
 		log.Fatalf("failed to create snapshotFactory: %v", err)
 	}
 
-	_ , error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
+	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
@@ -370,37 +383,37 @@ func main() {
 	}
 
 	/*
-	waitForPodRunning(kubeClient, createdPod.Namespace, createdPod.Name)
-	
+		waitForPodRunning(kubeClient, createdPod.Namespace, createdPod.Name)
 
-	req := kubeClient.CoreV1().RESTClient().Post().Resource("pods").Name(pod.GetName()).
-		Namespace(createdPod.GetNamespace()).SubResource("exec")
-	option := &corev1.PodExecOptions{
-		Command: command,
-		Stdin:   false,
-		Stdout:  true,
-		Stderr:  true,
-		TTY:     true,
-	}
-	req.VersionedParams(
-		option,
-		scheme.ParameterCodec,
-	)
-	exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
-	if err != nil {
-		panic("AHH")
-	}
 
-	var stdout, stderr bytes.Buffer
+		req := kubeClient.CoreV1().RESTClient().Post().Resource("pods").Name(pod.GetName()).
+			Namespace(createdPod.GetNamespace()).SubResource("exec")
+		option := &corev1.PodExecOptions{
+			Command: command,
+			Stdin:   false,
+			Stdout:  true,
+			Stderr:  true,
+			TTY:     true,
+		}
+		req.VersionedParams(
+			option,
+			scheme.ParameterCodec,
+		)
+		exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
+		if err != nil {
+			panic("AHH")
+		}
 
-	exec.Stream(remotecommand.StreamOptions{
-		Stdin:  nil,
-		Stdout: &stdout,
-		Stderr: &stderr,
-	})
+		var stdout, stderr bytes.Buffer
 
-	fmt.Println("Output:", stdout.String())
-	fmt.Println("Error:", stderr.String())
+		exec.Stream(remotecommand.StreamOptions{
+			Stdin:  nil,
+			Stdout: &stdout,
+			Stderr: &stderr,
+		})
+
+		fmt.Println("Output:", stdout.String())
+		fmt.Println("Error:", stderr.String())
 	*/
 	drainer := &kubedrain.Helper{
 		Client:              kubeClient,
@@ -409,7 +422,7 @@ func main() {
 		IgnoreAllDaemonSets: true,
 		DeleteEmptyDirData:  true,
 		GracePeriodSeconds:  -1,
-		Timeout: 20 * time.Second,
+		Timeout:             20 * time.Second,
 		OnPodDeletedOrEvicted: func(pod *corev1.Pod, usingEviction bool) {
 			usingEviction = false
 		},
@@ -417,8 +430,7 @@ func main() {
 		ErrOut: writer{klog.Error},
 	}
 	_ = drainer
-	 
-	
+
 	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil { // step 4
 		fmt.Println("Failed to uncordon")
 	}
@@ -429,7 +441,7 @@ func main() {
 	gallery := armcompute.Gallery{
 		Location: &galleryLocation,
 	}
-	
+
 	galleryFactory, err := armcompute.NewGalleriesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create gallery: %v", err)
@@ -441,8 +453,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
-	
-	_ , error = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
+
+	_, error = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.GalleryImageProperties{
 			HyperVGeneration: to.Ptr(armcompute.HyperVGenerationV1),
@@ -483,20 +495,18 @@ func main() {
 
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
-	} 
+	}
 
 	fmt.Printf("%T", poller)
 	_ = poller
 
-
-	
-
 	/*
-	_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
+		_ , error = snapshotFactory.BeginDelete(ctx, resourceGroupName, "example-snapshot", nil) // step 6
 
-	if error != nil {
-		log.Fatalf("failed to delete snapshot: %v", error)
-	}*/
+		if error != nil {
+			log.Fatalf("failed to delete snapshot: %v", error)
+		}*/
 
 }
+
 // force update capzcontrolplanemanager can be used for check, can also just add annotation/label to edit at all for reconcile, may need to play around
