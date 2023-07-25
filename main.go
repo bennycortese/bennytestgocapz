@@ -131,16 +131,16 @@ func main() {
 		},
 	}
 
-	curInstanceID := strconv.Itoa(2)
+	curInstanceID := strconv.Itoa(3)
 
 	for i := 0; i < int(replicaCount); i++ { // step 1
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
-				Name:      machinePoolName + "-" + strconv.Itoa(2),
+				Name:      machinePoolName + "-" + strconv.Itoa(3),
 			},
 		}
-		curInstanceID = strconv.Itoa(2)
+		curInstanceID = strconv.Itoa(3)
 		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
@@ -189,7 +189,7 @@ func main() {
 		ResourceGroup:  to.Ptr(resourceGroupName),
 		Gallery:        "GalleryInstantiation1",
 		Name:           "myGalleryImage",
-		Version:        "1.0.13",
+		Version:        "1.0.15",
 	}
 	fmt.Println(gallery_image)
 
@@ -378,6 +378,8 @@ func main() {
 		log.Fatalf("failed to run command on VMSS VM %s in resource group %s: %v", curInstanceID, resourceGroupName, err)
 	}
 
+	time.Sleep(60 * time.Second)
+
 	fmt.Printf("Run Command Result and Error: %v, %v \n", result, err)
 
 	osDisk := vm.StorageProfile.OsDisk.ManagedDisk.ID
@@ -395,7 +397,7 @@ func main() {
 	fmt.Printf("%T", osDisk)
 	fmt.Printf("%T", cred)
 
-	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot-48", armcompute.Snapshot{ // step 3
+	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot-50", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
@@ -504,7 +506,7 @@ func main() {
 		log.Fatalf("failed to create galleryImageVersionFactory: %v", err)
 	}
 
-	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.13", armcompute.GalleryImageVersion{
+	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.15", armcompute.GalleryImageVersion{
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.GalleryImageVersionProperties{
 			SafetyProfile: &armcompute.GalleryImageVersionSafetyProfile{
@@ -513,7 +515,7 @@ func main() {
 			StorageProfile: &armcompute.GalleryImageVersionStorageProfile{
 				OSDiskImage: &armcompute.GalleryOSDiskImage{
 					Source: &armcompute.GalleryDiskImageSource{
-						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot-48"),
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot-50"),
 					},
 				},
 			},
