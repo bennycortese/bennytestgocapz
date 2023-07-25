@@ -69,7 +69,7 @@ func waitForPodRunning(clientset *kubernetes.Clientset, namespace, name string) 
 			return nil, fmt.Errorf("timeout waiting for pod to reach Running phase")
 		}
 
-		time.Sleep(5 * time.Second)
+		time.Sleep(60 * time.Second)
 	}
 }
 
@@ -93,7 +93,7 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolClusterName := "machinepool-28681"
+	machinePoolClusterName := "machinepool-29922"
 
 	machinePoolName := machinePoolClusterName + "-mp-0"
 
@@ -131,16 +131,16 @@ func main() {
 		},
 	}
 
-	curInstanceID := strconv.Itoa(0)
+	curInstanceID := strconv.Itoa(2)
 
 	for i := 0; i < int(replicaCount); i++ { // step 1
 		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
 			ObjectMeta: metav1.ObjectMeta{
 				Namespace: "default",
-				Name:      machinePoolName + "-" + strconv.Itoa(i),
+				Name:      machinePoolName + "-" + strconv.Itoa(2),
 			},
 		}
-		curInstanceID = strconv.Itoa(i)
+		curInstanceID = strconv.Itoa(2)
 		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
 		if err != nil {
 			panic(err)
@@ -189,7 +189,7 @@ func main() {
 		ResourceGroup:  to.Ptr(resourceGroupName),
 		Gallery:        "GalleryInstantiation1",
 		Name:           "myGalleryImage",
-		Version:        "1.0.0",
+		Version:        "1.0.13",
 	}
 	fmt.Println(gallery_image)
 
@@ -209,10 +209,8 @@ func main() {
 	} else if !found {
 		log.Fatalf("failed to find node with the ProviderID")
 	}
-	fmt.Println("AH")
 	fmt.Println(node.Name)
 	fmt.Println(node.GetName())
-	fmt.Println("AH")
 
 	/*for _, image := range node.Status.Images {
 		fmt.Println(converters.ImageToSDK(image))
@@ -254,11 +252,19 @@ func main() {
 
 	//get_sleep := "apk add --no-cache coreutils && apk add tar"
 	//apk_commands := "apk update && apk update && apk search curl && apk -a info curl && apk add curl"
-	sleepy := "sleep 4"
-	cat_test := "/host/bin/cp -f /host/dev/null /host/etc/hostname"
-	rm_command := "/host/bin/rm -rf /host/var/lib/cloud/data/* /host/var/lib/cloud/instances/* /host/var/lib/waagent/history/* /host/var/lib/waagent/events/* /host/var/log/journal/*"
-	replace_machine_id_command := "/host/bin/cp /host/dev/null /host/etc/machine-id"
+	//prerunCommands := "/usr/bin/nsenter && -m/proc/1/ns/mnt && --"
+	/*
+		cat_test := "/host/bin/cp -f /host/dev/null /host/etc/hostname"
+		rm_command := "/host/bin/rm -rf /host/var/lib/cloud/data/* /host/var/lib/cloud/instances/* /host/var/lib/waagent/history/* /host/var/lib/waagent/events/* /host/var/log/journal/*"
+		replace_machine_id_command := "/host/bin/cp /host/dev/null /host/etc/machine-id"
+	*/
 
+	sleepy := "sleep 4"
+	cat_test := "/bin/cp -f /dev/null /etc/hostname"
+	rm_command := "/bin/rm -rf /var/lib/cloud/data/* /var/lib/cloud/instances/* /var/lib/waagent/history/* /var/lib/waagent/events/* /var/log/journal/*"
+	replace_machine_id_command := "/bin/cp /dev/null /etc/machine-id"
+	kubectl_cleanup := "/bin/rm -rf /run/kubeadm/kubeadm-join-config.yaml"
+	// /etc/kubernetes/kubelet.conf /etc/kubernetes/pki/ca.crt
 	//insane_kubeadm_sequence := insane_kubeadm_sequence_1 + " && " + insane_kubeadm_sequence_2 + " && " + insane_kubeadm_sequence_3 + " && " + insane_kubeadm_sequence_4
 	//command := []string{"sh", "-c", get_sleep + " && " + sleepy + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + insane_kubeadm_sequence}
 	//command := []string{"sh", "-c", cat_test}
@@ -266,14 +272,17 @@ func main() {
 	//insane_kubeadm_sequence := "wget https://storage.googleapis.com/kubernetes-release/release/v1.27.1/bin/linux/amd64/kubeadm && chmod +x kubeadm && echo y | ./kubeadm reset"
 	//command := []string{"sh", "-c", get_sleep + " && " + apk_commands + " && " + sleepy + " && " + insane_kubeadm_sequence + " && " + rm_command + " && " + replace_machine_id_command}
 	//insane_kubeadm_sequence := "echo y | /host/usr/bin/kubeadm reset && echo y | /host/usr/bin/kubeadm init"
-	insane_kubeadm_sequence := "/host/bin/rm -rf /host/etc/kubernetes/kubelet.conf /host/etc/kubernetes/pki/ca.crt"
+	//insane_kubeadm_sequence := "/host/bin/rm -rf /host/etc/kubernetes/kubelet.conf /host/etc/kubernetes/pki/ca.crt"
 	//kubeadm_step_3 := "curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | gpg --dearmor -o /etc/apt/keyrings/kubernetes-archive-keyring.gpg"
 	//kubeadm_step_4 := "echo \"deb [signed-by=/etc/apt/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main\" | tee /etc/apt/sources.list.d/kubernetes.list"
 	//kubeadm_step_5 := "apt-get update && apt-get install -y kubelet kubeadm kubectl && apt-mark hold kubelet kubeadm kubectl"
 	//kubeadm_install := "apt-get update && apt-get install -y apt-transport-https ca-certificates curl && " + kubeadm_step_3 + " && " + kubeadm_step_4 + " && " + kubeadm_step_5
 	// && echo y | apt update && echo y | apt upgrade && echo y | apt-get install wget
 	//kubeadm_reset := "kubeadm reset"
-	command := []string{"sh", "-c", sleepy + " && /host/kill -9 1361 && touch /host/rock.txt && " + insane_kubeadm_sequence + " && " + cat_test + " && " + rm_command + " && " + replace_machine_id_command}
+
+	// /usr/bin/systemctl stop kubelet.service
+
+	command := []string{"/usr/bin/nsenter", "-m/proc/1/ns/mnt", "--", "/bin/sh", "-xc", sleepy + " && touch rock.txt &&" + cat_test + " && " + rm_command + " && " + replace_machine_id_command + " && " + kubectl_cleanup}
 	runAsUser := int64(0)
 	isTrue := true
 	pod := &corev1.Pod{
@@ -293,15 +302,15 @@ func main() {
 						RunAsUser:  &runAsUser, // Run as root user
 						Privileged: &isTrue,
 					},
-					VolumeMounts: []corev1.VolumeMount{
+					/*VolumeMounts: []corev1.VolumeMount{
 						{
 							Name:      "host-root",
 							MountPath: "/host",
 						},
-					},
+					},*/
 				},
 			},
-			Volumes: []corev1.Volume{
+			/*Volumes: []corev1.Volume{
 				{
 					Name: "host-root",
 					VolumeSource: corev1.VolumeSource{
@@ -310,7 +319,7 @@ func main() {
 						},
 					},
 				},
-			},
+			},*/
 			NodeSelector: map[string]string{
 				"kubernetes.io/hostname": node.Name,
 			},
@@ -325,11 +334,12 @@ func main() {
 	_ = createdPod
 	_ = pod
 
-	time.Sleep(30 * time.Second)
+	time.Sleep(60 * time.Second)
 
 	err = myscope.CordonAndDrain(ctx) // step 2
 	if err != nil {
-		log.Fatalf("failed to drain: %v", err)
+		//log.Fatalf("failed to drain: %v", err)
+		fmt.Println("Broken tilt file: %v", err)
 	}
 
 	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
@@ -356,6 +366,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to find VM")
 	}
+	//az vmss run-command invoke -g "machinepool-29922" -n "machinepool-29922-mp-0" --command-id RunShellScript --instance-id 0 --scripts "kubeadm reset -f > kubres.txt"
+	runCommandInput := compute.RunCommandInput{CommandID: to.Ptr("RunShellScript"),
+		//Parameters: {RunElevated: to.Ptr(true)},
+		Script: &[]string{"kubeadm reset -f > HELP.txt"},
+		// /var/lib/waagent/run-command/download/
+	}
+
+	result, err := vmssVMsClient.RunCommand(ctx, machinePoolClusterName, machinePoolName, curInstanceID, runCommandInput)
+	if err != nil {
+		log.Fatalf("failed to run command on VMSS VM %s in resource group %s: %v", curInstanceID, resourceGroupName, err)
+	}
+
+	fmt.Printf("Run Command Result and Error: %v, %v \n", result, err)
+
 	osDisk := vm.StorageProfile.OsDisk.ManagedDisk.ID
 	fmt.Println("OS DISK: ", *osDisk)
 
@@ -367,8 +391,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create snapshotFactory: %v", err)
 	}
+	_ = snapshotFactory
+	fmt.Printf("%T", osDisk)
+	fmt.Printf("%T", cred)
 
-	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot", armcompute.Snapshot{ // step 3
+	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot-48", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
@@ -454,7 +481,7 @@ func main() {
 		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
 
-	_, error = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
+	_, err = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.GalleryImageProperties{
 			HyperVGeneration: to.Ptr(armcompute.HyperVGenerationV1),
@@ -468,8 +495,8 @@ func main() {
 		},
 	}, nil)
 
-	if error != nil {
-		log.Fatalf("failed to create image: %v", error)
+	if err != nil {
+		log.Fatalf("failed to create image: %v", err)
 	}
 
 	galleryImageVersionFactory, err := armcompute.NewGalleryImageVersionsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
@@ -477,7 +504,7 @@ func main() {
 		log.Fatalf("failed to create galleryImageVersionFactory: %v", err)
 	}
 
-	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.0", armcompute.GalleryImageVersion{
+	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.13", armcompute.GalleryImageVersion{
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.GalleryImageVersionProperties{
 			SafetyProfile: &armcompute.GalleryImageVersionSafetyProfile{
@@ -486,7 +513,7 @@ func main() {
 			StorageProfile: &armcompute.GalleryImageVersionStorageProfile{
 				OSDiskImage: &armcompute.GalleryOSDiskImage{
 					Source: &armcompute.GalleryDiskImageSource{
-						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot"),
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot-48"),
 					},
 				},
 			},
