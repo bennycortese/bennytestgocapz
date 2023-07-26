@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"strconv"
 	"time"
 
 	//"strings"
 	//"os/exec"
 	//"bytes"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/runtime"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
 
 	"github.com/Azure/azure-sdk-for-go/profiles/latest/compute/mgmt/compute"
@@ -93,11 +93,9 @@ func main() {
 
 	ctx := context.Background()
 
-	machinePoolClusterName := "machinepool-29922"
+	machinePoolClusterName := "machinepool-10052"
 
 	machinePoolName := machinePoolClusterName + "-mp-0"
-
-	resourceGroupName := "capi-quickstart"
 
 	mp := &clusterv1exp.MachinePool{
 		ObjectMeta: metav1.ObjectMeta{
@@ -121,31 +119,51 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("here")
-	replicaCount := amp.Status.Replicas
+
+	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
+	resourceGroup := machinePoolClusterName
+	vmssName := machinePoolName
+	_ = subscriptionID
+	_ = resourceGroup
+	//_ = nodeName
+
+	fmt.Println(os.Getenv("AZURE_CLIENT_ID"))
+	credConfig := auth.NewClientCredentialsConfig(os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET"), os.Getenv("AZURE_TENANT_ID"))
+	authorizer, err := credConfig.Authorizer()
+	if err != nil {
+		panic(err)
+	}
+
+	vmssClient := compute.NewVirtualMachineScaleSetsClient(subscriptionID)
+	vmssClient.Authorizer = authorizer
+
+	vmssVMsClient := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
+	vmssVMsClient.Authorizer = authorizer
+
+	vmssVMs, err := vmssVMsClient.List(context.Background(), resourceGroup, vmssName, "", "", "")
+	if err != nil {
+		panic(err)
+	}
+	instanceIds := make([]string, 0)
+	for _, vm := range vmssVMs.Values() {
+		instanceIds = append(instanceIds, *vm.InstanceID)
+	}
+
+	curInstanceID := instanceIds[len(instanceIds)-1]
 
 	healthyAmpm := &infrav1exp.AzureMachinePoolMachine{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace: "default",
-			Name:      "-1",
+			Name:      machinePoolName + "-" + curInstanceID,
 		},
 	}
 
-	curInstanceID := strconv.Itoa(3)
-
-	for i := 0; i < int(replicaCount); i++ { // step 1
-		healthyAmpm = &infrav1exp.AzureMachinePoolMachine{
-			ObjectMeta: metav1.ObjectMeta{
-				Namespace: "default",
-				Name:      machinePoolName + "-" + strconv.Itoa(3),
-			},
-		}
-		curInstanceID = strconv.Itoa(3)
-		err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
-		if err != nil {
-			panic(err)
-		}
+	err = c.Get(ctx, client.ObjectKeyFromObject(healthyAmpm), healthyAmpm)
+	if err != nil {
+		panic(err)
 	}
+
+	fmt.Printf(machinePoolName + "-" + curInstanceID)
 
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
@@ -170,7 +188,7 @@ func main() {
 				},
 				ResourceGroup: machinePoolClusterName,
 				NetworkSpec: infrav1.NetworkSpec{
-					Vnet: infrav1.VnetSpec{Name: resourceGroupName + "-vnet", ResourceGroup: machinePoolClusterName},
+					Vnet: infrav1.VnetSpec{Name: resourceGroup + "-vnet", ResourceGroup: machinePoolClusterName},
 				},
 			},
 		},
@@ -186,10 +204,10 @@ func main() {
 
 	gallery_image := infrav1.AzureComputeGalleryImage{
 		SubscriptionID: to.Ptr(os.Getenv("AZURE_SUBSCRIPTION_ID")),
-		ResourceGroup:  to.Ptr(resourceGroupName),
-		Gallery:        "GalleryInstantiation1",
-		Name:           "myGalleryImage",
-		Version:        "1.0.15",
+		ResourceGroup:  to.Ptr(resourceGroup),
+		Gallery:        "GalleryInstantiation2",
+		Name:           "myGalleryImage2",
+		Version:        "1.0.1",
 	}
 	fmt.Println(gallery_image)
 
@@ -336,31 +354,11 @@ func main() {
 
 	time.Sleep(60 * time.Second)
 
-	err = myscope.CordonAndDrain(ctx) // step 2
+	/*err = myscope.CordonAndDrain(ctx) // step 2
 	if err != nil {
 		//log.Fatalf("failed to drain: %v", err)
 		fmt.Println("Broken tilt file: %v", err)
-	}
-
-	subscriptionID := os.Getenv("AZURE_SUBSCRIPTION_ID")
-	resourceGroup := machinePoolClusterName
-	vmssName := machinePoolName
-	_ = subscriptionID
-	_ = resourceGroup
-	//_ = nodeName
-
-	fmt.Println(os.Getenv("AZURE_CLIENT_ID"))
-	credConfig := auth.NewClientCredentialsConfig(os.Getenv("AZURE_CLIENT_ID"), os.Getenv("AZURE_CLIENT_SECRET"), os.Getenv("AZURE_TENANT_ID"))
-	authorizer, err := credConfig.Authorizer()
-	if err != nil {
-		panic(err)
-	}
-
-	vmssClient := compute.NewVirtualMachineScaleSetsClient(subscriptionID)
-	vmssClient.Authorizer = authorizer
-
-	vmssVMsClient := compute.NewVirtualMachineScaleSetVMsClient(subscriptionID)
-	vmssVMsClient.Authorizer = authorizer
+	}*/
 
 	vm, err := vmssVMsClient.Get(ctx, resourceGroup, vmssName, curInstanceID, "")
 	if err != nil {
@@ -375,7 +373,7 @@ func main() {
 
 	result, err := vmssVMsClient.RunCommand(ctx, machinePoolClusterName, machinePoolName, curInstanceID, runCommandInput)
 	if err != nil {
-		log.Fatalf("failed to run command on VMSS VM %s in resource group %s: %v", curInstanceID, resourceGroupName, err)
+		log.Fatalf("failed to run command on VMSS VM %s in resource group %s: %v", curInstanceID, resourceGroup, err)
 	}
 
 	time.Sleep(60 * time.Second)
@@ -397,7 +395,7 @@ func main() {
 	fmt.Printf("%T", osDisk)
 	fmt.Printf("%T", cred)
 
-	_, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroupName, "example-snapshot-50", armcompute.Snapshot{ // step 3
+	poller, error := snapshotFactory.BeginCreateOrUpdate(ctx, resourceGroup, "example-snapshot2", armcompute.Snapshot{ // step 3
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.SnapshotProperties{
 			CreationData: &armcompute.CreationData{
@@ -411,39 +409,15 @@ func main() {
 		log.Fatalf("failed to create snapshot: %v", error)
 	}
 
-	/*
-		waitForPodRunning(kubeClient, createdPod.Namespace, createdPod.Name)
+	snapshotPollingInterval := 15 * time.Second
 
+	future, err := poller.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{Frequency: snapshotPollingInterval})
+	if err != nil {
+		return
+	}
 
-		req := kubeClient.CoreV1().RESTClient().Post().Resource("pods").Name(pod.GetName()).
-			Namespace(createdPod.GetNamespace()).SubResource("exec")
-		option := &corev1.PodExecOptions{
-			Command: command,
-			Stdin:   false,
-			Stdout:  true,
-			Stderr:  true,
-			TTY:     true,
-		}
-		req.VersionedParams(
-			option,
-			scheme.ParameterCodec,
-		)
-		exec, err := remotecommand.NewSPDYExecutor(restConfig, "POST", req.URL())
-		if err != nil {
-			panic("AHH")
-		}
+	_ = future
 
-		var stdout, stderr bytes.Buffer
-
-		exec.Stream(remotecommand.StreamOptions{
-			Stdin:  nil,
-			Stdout: &stdout,
-			Stderr: &stderr,
-		})
-
-		fmt.Println("Output:", stdout.String())
-		fmt.Println("Error:", stderr.String())
-	*/
 	drainer := &kubedrain.Helper{
 		Client:              kubeClient,
 		Ctx:                 ctx,
@@ -460,12 +434,12 @@ func main() {
 	}
 	_ = drainer
 
-	if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil { // step 4
+	/*if err := kubedrain.RunCordonOrUncordon(drainer, node, false); err != nil { // step 4
 		fmt.Println("Failed to uncordon")
-	}
+	}*/
 
 	galleryLocation := os.Getenv("AZURE_LOCATION")
-	galleryName := "GalleryInstantiation1"
+	galleryName := "GalleryInstantiation2"
 
 	gallery := armcompute.Gallery{
 		Location: &galleryLocation,
@@ -476,14 +450,14 @@ func main() {
 		log.Fatalf("failed to create gallery: %v", err)
 	}
 
-	galleryFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, gallery, nil)
+	galleryFactory.BeginCreateOrUpdate(ctx, resourceGroup, galleryName, gallery, nil)
 
 	galleryImageFactory, err := armcompute.NewGalleryImagesClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create galleryImageFactory: %v", err)
 	}
 
-	_, err = galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", armcompute.GalleryImage{
+	pollerGal, err := galleryImageFactory.BeginCreateOrUpdate(ctx, resourceGroup, galleryName, "myGalleryImage2", armcompute.GalleryImage{
 		Location: to.Ptr(os.Getenv("AZURE_LOCATION")),
 		Properties: &armcompute.GalleryImageProperties{
 			HyperVGeneration: to.Ptr(armcompute.HyperVGenerationV1),
@@ -501,12 +475,19 @@ func main() {
 		log.Fatalf("failed to create image: %v", err)
 	}
 
+	future2, err := pollerGal.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{Frequency: snapshotPollingInterval})
+	if err != nil {
+		return
+	}
+
+	_ = future2
+
 	galleryImageVersionFactory, err := armcompute.NewGalleryImageVersionsClient(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
 		log.Fatalf("failed to create galleryImageVersionFactory: %v", err)
 	}
 
-	poller, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroupName, galleryName, "myGalleryImage", "1.0.15", armcompute.GalleryImageVersion{
+	pollerDef, err := galleryImageVersionFactory.BeginCreateOrUpdate(ctx, resourceGroup, galleryName, "myGalleryImage2", "1.0.1", armcompute.GalleryImageVersion{
 		Location: to.Ptr("East US"),
 		Properties: &armcompute.GalleryImageVersionProperties{
 			SafetyProfile: &armcompute.GalleryImageVersionSafetyProfile{
@@ -515,7 +496,7 @@ func main() {
 			StorageProfile: &armcompute.GalleryImageVersionStorageProfile{
 				OSDiskImage: &armcompute.GalleryOSDiskImage{
 					Source: &armcompute.GalleryDiskImageSource{
-						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroupName + "/providers/Microsoft.Compute/snapshots/example-snapshot-50"),
+						ID: to.Ptr("subscriptions/" + os.Getenv("AZURE_SUBSCRIPTION_ID") + "/resourceGroups/" + resourceGroup + "/providers/Microsoft.Compute/snapshots/example-snapshot2"),
 					},
 				},
 			},
@@ -525,6 +506,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to finish the request: %v", err)
 	}
+
+	future3, err := pollerDef.PollUntilDone(ctx, &runtime.PollUntilDoneOptions{Frequency: snapshotPollingInterval})
+	if err != nil {
+		return
+	}
+
+	_ = future3
 
 	fmt.Printf("%T", poller)
 	_ = poller
